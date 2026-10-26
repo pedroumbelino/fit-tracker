@@ -1,0 +1,9 @@
+# Configuração mínima para `supabase functions deploy`.
+project_id = "fit-tracker"
+
+[functions.coach]
+verify_jwt = true
+
+# O Atalho do iOS autentica-se com um token próprio (ver create_ingest_token), não com o JWT do Supabase.
+[functions.health-ingest]
+verify_jwt = false
