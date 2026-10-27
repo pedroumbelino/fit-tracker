@@ -67,7 +67,8 @@ Deno.serve(async (req) => {
   }
   const days = (Array.isArray(body) ? body : [body]).filter((d): d is Record<string, unknown> => !!d && typeof d === 'object').slice(0, 60)
   const rows = days.flatMap((d) => rowsFor(owner.user_id, d))
-  if (!rows.length) return json({ ok: true, saved: 0 })
+  // Devolve o que chegou para ser fácil perceber o que o Atalho está a enviar.
+  if (!rows.length) return json({ ok: true, saved: 0, received: body })
 
   const { error } = await admin.from('health_daily').upsert(rows)
   if (error) {
