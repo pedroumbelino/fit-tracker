@@ -12,12 +12,14 @@ const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE
 
 const METRICS = ['steps', 'active_kcal', 'exercise_min', 'resting_hr', 'hrv', 'sleep_h', 'weight', 'body_fat', 'vo2max', 'water_ml'] as const
 
-// Os Atalhos em português podem mandar "7,5" ou "8 234" como texto.
+// Os Atalhos em português podem mandar "7,5", "8 234", "1.234,5" ou "83,6 kg" como texto.
 function toNumber(v: unknown): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
   if (typeof v !== 'string') return null
-  const n = Number(v.replace(/[\s ]/g, '').replace(',', '.'))
-  return Number.isFinite(n) ? n : null
+  let s = v.replace(/[\s  ]/g, '')
+  s = s.includes('.') && s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s.replace(',', '.')
+  const m = s.match(/-?\d+(?:\.\d+)?/)
+  return m ? Number(m[0]) : null
 }
 
 function lisbonToday(): string {
@@ -35,6 +37,8 @@ function rowsFor(userId: string, day: Record<string, unknown>) {
   // Aceita o sono noutras unidades, se o Atalho as mandar.
   if (values.sleep_h == null && toNumber(day.sleep_min) != null) values.sleep_h = toNumber(day.sleep_min)! / 60
   if (values.sleep_h == null && toNumber(day.sleep_s) != null) values.sleep_h = toNumber(day.sleep_s)! / 3600
+  // A soma de durações nos Atalhos pode vir em minutos ou segundos: uma noite nunca tem mais de 24 h.
+  if (values.sleep_h != null && values.sleep_h > 24) values.sleep_h /= values.sleep_h > 1440 ? 3600 : 60
   // Body fat pode vir como fração (0,18) ou percentagem (18).
   if (values.body_fat != null && values.body_fat < 1) values.body_fat *= 100
 
