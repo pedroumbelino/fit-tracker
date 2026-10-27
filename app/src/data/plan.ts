@@ -194,6 +194,8 @@ export type Exercise = {
   rest: number
   note?: string
   knee?: boolean
+  /** Alternativa quando o joelho dói (check-in com dor 4 ou mais). */
+  alt?: string
 }
 
 export type Session = {
@@ -210,7 +212,7 @@ export type Session = {
 const PREHAB: Exercise[] = [
   { id: 'tke', name: 'Extensão terminal do joelho com elástico', sets: 2, reps: '15', rest: 30, knee: true, note: 'Elástico atrás do joelho, estica por completo e aperta a coxa 1 s.' },
   { id: 'ponte', name: 'Ponte de glúteo', sets: 2, reps: '12', rest: 30 },
-  { id: 'spanish', name: 'Agachamento espanhol isométrico', sets: 2, reps: '30 s', rest: 45, knee: true, note: 'Elástico grosso atrás dos joelhos preso a um poste. Desce até 60° e aguenta. Alivia o joelho.' },
+  { id: 'spanish', name: 'Agachamento espanhol isométrico', sets: 2, reps: '30 s', rest: 45, knee: true, note: 'Elástico grosso atrás dos joelhos preso a um poste. Desce até 60° e aguenta. Alivia o joelho.', alt: 'a mesma posição com menos flexão (ângulo mais aberto), 20 s' },
 ]
 
 export const SESSIONS: Record<string, Session> = {
@@ -234,7 +236,7 @@ export const SESSIONS: Record<string, Session> = {
       ...PREHAB,
       { id: 'rdl', name: 'Peso morto romeno', sets: 4, reps: '6-8', rest: 150, note: 'Joelhos ligeiramente fletidos e fixos. Quase sem carga no joelho.' },
       { id: 'hipThrust', name: 'Hip thrust', sets: 3, reps: '8-10', rest: 120 },
-      { id: 'legPress', name: 'Leg press com pés altos', sets: 3, reps: '10-12', rest: 120, knee: true, note: 'Desce só até onde não houver dor. Nada de rodar o joelho.' },
+      { id: 'legPress', name: 'Leg press com pés altos', sets: 3, reps: '10-12', rest: 120, knee: true, note: 'Desce só até onde não houver dor. Nada de rodar o joelho.', alt: 'Leg curl sentado extra (3 × 12) ou leg press só até 60°' },
       { id: 'legCurlSent', name: 'Leg curl sentado', sets: 3, reps: '10-12', rest: 90 },
       { id: 'abducao', name: 'Abdução da anca na máquina', sets: 2, reps: '15', rest: 60 },
       { id: 'gemeos', name: 'Gémeos em pé', sets: 3, reps: '12-15', rest: 60 },
@@ -268,10 +270,10 @@ export const SESSIONS: Record<string, Session> = {
     warmup: '5 min passadeira inclinada + bloco de proteção do joelho.',
     exercises: [
       ...PREHAB,
-      { id: 'goblet', name: 'Agachamento goblet até à caixa', sets: 3, reps: '8-10', rest: 120, knee: true, note: 'Caixa à altura do paralelo. Senta, não te atires. Só se não houver dor.' },
-      { id: 'stepUp', name: 'Step-up em caixa baixa', sets: 3, reps: '10/perna', rest: 90, knee: true, note: 'Caixa de 30 a 40 cm. Joelho alinhado com o pé.' },
+      { id: 'goblet', name: 'Agachamento goblet até à caixa', sets: 3, reps: '8-10', rest: 120, knee: true, note: 'Caixa à altura do paralelo. Senta, não te atires. Só se não houver dor.', alt: 'Hip thrust com halter (3 × 10)' },
+      { id: 'stepUp', name: 'Step-up em caixa baixa', sets: 3, reps: '10/perna', rest: 90, knee: true, note: 'Caixa de 30 a 40 cm. Joelho alinhado com o pé.', alt: 'Ponte de glúteo unilateral (3 × 12/perna)' },
       { id: 'hiperext', name: 'Extensão lombar a 45°', sets: 3, reps: '12', rest: 90 },
-      { id: 'legExt', name: 'Leg extension parcial (90° a 30°)', sets: 3, reps: '12-15', rest: 60, knee: true, note: 'Carga leve, controlado. Para se doer.' },
+      { id: 'legExt', name: 'Leg extension parcial (90° a 30°)', sets: 3, reps: '12-15', rest: 60, knee: true, note: 'Carga leve, controlado. Para se doer.', alt: 'Agachamento espanhol isométrico (3 × 30 s)' },
       { id: 'legCurlDeit', name: 'Leg curl deitado', sets: 3, reps: '10-12', rest: 90 },
       { id: 'gemeosSent', name: 'Gémeos sentado', sets: 3, reps: '15', rest: 60 },
       { id: 'deadBug', name: 'Dead bug', sets: 3, reps: '10', rest: 45 },

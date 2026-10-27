@@ -44,6 +44,8 @@ export const ai = {
   chat: (messages: { role: 'user' | 'assistant'; text: string; image?: string }[], context: unknown) =>
     call<{ text: string }>({ mode: 'chat', messages, context }),
   readiness: (context: unknown) => call<ReadinessAI>({ mode: 'readiness', context }),
+  weekly: (week: unknown, recommendation: unknown, context: unknown) =>
+    call<{ text: string; jev: { decision: string; confidence: number } | null }>({ mode: 'weekly', week, recommendation, context }),
 }
 
 /** Reduz a foto para no máximo 1024 px e devolve JPEG em base64 (sem prefixo data:). */

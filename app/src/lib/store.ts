@@ -48,11 +48,26 @@ export type ChatMsg = { id: string; role: 'user' | 'assistant'; text: string; im
 
 export type Theme = 'system' | 'light' | 'dark'
 
+export type NotifyKind = 'briefing' | 'water' | 'supps' | 'training' | 'phone' | 'weekly'
+export type Notify = Record<NotifyKind, boolean>
+export const DEFAULT_NOTIFY: Notify = { briefing: true, water: true, supps: true, training: true, phone: true, weekly: true }
+
+export type Review = { week: string; decision: 'keep' | 'cut' | 'add'; applied: boolean; at: number }
+
+export type Settings = {
+  theme: Theme
+  notify?: Notify
+  /** Ajuste às calorias do plano, decidido nas revisões semanais (kcal). */
+  kcalAdjust?: number
+  reviews?: Review[]
+  updatedAt: number
+}
+
 export type State = {
   days: Record<string, DayLog>
   health: Record<string, HealthDay>
   shopping: { checked: Record<string, boolean>; updatedAt: number }
-  settings: { theme: Theme; updatedAt: number }
+  settings: Settings
   chat: { msgs: ChatMsg[]; updatedAt: number }
   dirty: string[]
 }
@@ -173,6 +188,17 @@ export const actions = {
   },
   setTheme(theme: Theme) {
     state = { ...state, settings: { ...state.settings, theme, updatedAt: Date.now() } }
+    emit('settings')
+  },
+  setNotify(kind: NotifyKind, on: boolean) {
+    const notify = { ...DEFAULT_NOTIFY, ...state.settings.notify, [kind]: on }
+    state = { ...state, settings: { ...state.settings, notify, updatedAt: Date.now() } }
+    emit('settings')
+  },
+  saveReview(review: Omit<Review, 'at'>, kcalDelta: number) {
+    const reviews = [...(state.settings.reviews ?? []).filter((r) => r.week !== review.week), { ...review, at: Date.now() }].slice(-26)
+    const kcalAdjust = Math.max(-450, Math.min(300, (state.settings.kcalAdjust ?? 0) + kcalDelta))
+    state = { ...state, settings: { ...state.settings, reviews, kcalAdjust, updatedAt: Date.now() } }
     emit('settings')
   },
   addChat(msg: Omit<ChatMsg, 'id' | 'at'>) {

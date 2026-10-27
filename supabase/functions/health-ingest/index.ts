@@ -50,6 +50,21 @@ function rowsFor(userId: string, day: Record<string, unknown>) {
   })
 }
 
+// Água pela Siri: soma ao registo do dia na app (documento day:AAAA-MM-DD em user_kv).
+async function addWater(userId: string, date: string, ml: number) {
+  const key = `day:${date}`
+  const { data } = await admin.from('user_kv').select('value').eq('user_id', userId).eq('key', key).maybeSingle()
+  const day = (data?.value as Record<string, unknown> | null) ?? { water: 0, meals: [], sets: [], supps: [], habits: [] }
+  const water = Math.max(0, Number(day.water ?? 0) + ml)
+  const { error } = await admin.from('user_kv').upsert({
+    user_id: userId, key, value: { ...day, water, updatedAt: Date.now() }, updated_at: new Date().toISOString(),
+  })
+  if (error) throw error
+  return water
+}
+
+const litres = (ml: number) => (ml / 1000).toLocaleString('pt-PT', { maximumFractionDigits: 1 })
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'Usa POST' }, 405)
@@ -65,6 +80,19 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: 'JSON inválido' }, 400)
   }
+  // Atalhos da Siri: "bebi água" e "peso".
+  if (body && typeof body === 'object' && !Array.isArray(body) && 'add_water_ml' in body) {
+    const ml = toNumber((body as Record<string, unknown>).add_water_ml)
+    if (!ml || ml < -2000 || ml > 3000) return json({ error: 'Quantidade de água inválida' }, 400)
+    try {
+      const water = await addWater(owner.user_id, lisbonToday(), ml)
+      return json({ ok: true, water_ml: water, message: `Registado. Já bebeste ${litres(water)} litros hoje.` })
+    } catch (e) {
+      console.error(e)
+      return json({ error: 'Erro ao guardar a água' }, 500)
+    }
+  }
+
   const days = (Array.isArray(body) ? body : [body]).filter((d): d is Record<string, unknown> => !!d && typeof d === 'object').slice(0, 60)
   const rows = days.flatMap((d) => rowsFor(owner.user_id, d))
   // Devolve o que chegou para ser fácil perceber o que o Atalho está a enviar.
@@ -75,5 +103,9 @@ Deno.serve(async (req) => {
     console.error(error)
     return json({ error: 'Erro ao guardar' }, 500)
   }
-  return json({ ok: true, saved: rows.length, metrics: rows.map((r) => r.metric) })
+  const weight = rows.find((r) => r.metric === 'weight')
+  const message = rows.length === 1 && weight
+    ? `Peso registado: ${weight.value.toLocaleString('pt-PT')} kg.`
+    : `Guardadas ${rows.length} métricas da Saúde.`
+  return json({ ok: true, saved: rows.length, metrics: rows.map((r) => r.metric), message })
 })

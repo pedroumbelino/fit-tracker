@@ -1,17 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Icon, toast } from '../components/ui'
+import { Icon, LineChart, toast } from '../components/ui'
 import { DAY_SHORT, SESSIONS, TRAINING_RULES, WEEK_TRAINING, type Exercise } from '../data/plan'
 import { addDays, dow, todayKey } from '../lib/date'
-import { actions, getDay, useStore, type SetLog, type State } from '../lib/store'
-
-function lastPerformance(s: State, exerciseId: string, before: string): { date: string; sets: SetLog[] } | null {
-  const dates = Object.keys(s.days).filter((d) => d < before).sort().reverse()
-  for (const d of dates) {
-    const sets = s.days[d].sets.filter((x) => x.exerciseId === exerciseId)
-    if (sets.length) return { date: d, sets }
-  }
-  return null
-}
+import { isTimeBased, lastPerformance, strengthHistory, suggestLoad } from '../lib/progression'
+import { actions, getDay, useStore, type State } from '../lib/store'
 
 function cycleWeek(s: State): number | null {
   const first = Object.keys(s.days).filter((d) => s.days[d].sets.length || s.days[d].workoutDone).sort()[0]
@@ -85,7 +77,7 @@ export default function Training() {
       )}
 
       {session.exercises.map((ex) => (
-        <ExerciseCard key={ex.id} ex={ex} date={date} state={state} onRest={(sec) => sec > 0 && setRest({ until: Date.now() + sec * 1000, total: sec })} />
+        <ExerciseCard key={ex.id} ex={ex} date={date} state={state} cycleWeek={cw} kneePain={day.checkin?.knee ?? 0} onRest={(sec) => sec > 0 && setRest({ until: Date.now() + sec * 1000, total: sec })} />
       ))}
 
       {session.finisher && <div className="card"><p className="small">{session.finisher}</p></div>}
@@ -104,14 +96,25 @@ export default function Training() {
   )
 }
 
-function ExerciseCard({ ex, date, state, onRest }: { ex: Exercise; date: string; state: State; onRest: (s: number) => void }) {
+function ExerciseCard({ ex, date, state, cycleWeek, kneePain, onRest }: {
+  ex: Exercise; date: string; state: State; cycleWeek: number | null; kneePain: number; onRest: (s: number) => void
+}) {
   const sets = getDay(state, date).sets.filter((s) => s.exerciseId === ex.id)
   const last = lastPerformance(state, ex.id, date)
-  const lastSet = sets[sets.length - 1] ?? last?.sets[0]
-  const [kg, setKg] = useState(lastSet ? String(lastSet.kg) : '')
-  const [reps, setReps] = useState(lastSet ? String(lastSet.reps) : '')
-  const timeBased = /\b(s|min|m)\b/.test(ex.reps)
+  const kneeBlock = !!ex.knee && kneePain >= 4
+  const raw = suggestLoad(ex, last, cycleWeek)
+  // Com o joelho a doer, nunca sugerir subir carga num exercício que o carrega.
+  const suggestion = raw && kneeBlock && raw.tone === 'up'
+    ? { ...raw, kg: raw.kg - (/halter/i.test(ex.name) ? 2 : 2.5), label: 'Joelho a doer: não subas carga hoje', tone: 'hold' as const }
+    : raw
+  const lastSet = sets[sets.length - 1]
+  // A primeira série do dia começa com a carga sugerida; as seguintes repetem a anterior.
+  const [kg, setKg] = useState(lastSet ? String(lastSet.kg) : suggestion ? String(suggestion.kg) : last ? String(last.sets[0].kg) : '')
+  const [reps, setReps] = useState(lastSet ? String(lastSet.reps) : suggestion ? String(suggestion.reps) : '')
+  const [showHistory, setShowHistory] = useState(false)
+  const timeBased = isTimeBased(ex)
   const done = sets.length >= ex.sets
+  const history = showHistory ? strengthHistory(state, ex.id) : []
 
   return (
     <div className="card" style={{ opacity: done ? 0.75 : 1 }}>
@@ -126,8 +129,27 @@ function ExerciseCard({ ex, date, state, onRest }: { ex: Exercise; date: string;
         </div>
       </div>
       {ex.note && <p className="small" style={{ marginTop: 6 }}>{ex.note}</p>}
+      {ex.knee && ex.alt && kneePain >= 4 && (
+        <p className="small" style={{ marginTop: 6, color: 'var(--warn)' }}>Joelho a {kneePain}/10 hoje: troca por {ex.alt}.</p>
+      )}
       {last && !timeBased && (
-        <p className="tiny muted num" style={{ marginTop: 6 }}>Última vez: {last.sets.map((s) => `${s.kg}×${s.reps}`).join(', ')}</p>
+        <div className="row between" style={{ marginTop: 6, gap: 8 }}>
+          <p className="tiny muted num">Última vez: {last.sets.map((s) => `${s.kg}×${s.reps}`).join(', ')}</p>
+          <button className="btn small ghost" style={{ minHeight: 26, padding: '2px 8px', fontSize: 11 }} onClick={() => setShowHistory(!showHistory)}>
+            {showHistory ? 'Fechar' : 'Evolução'}
+          </button>
+        </div>
+      )}
+      {suggestion && sets.length === 0 && (
+        <p className={`chip ${suggestion.tone === 'up' ? 'accent' : suggestion.tone === 'deload' ? 'warn' : ''}`} style={{ marginTop: 8 }}>
+          {suggestion.tone === 'up' ? '↑ ' : ''}{suggestion.label}
+        </p>
+      )}
+      {showHistory && (
+        <div style={{ marginTop: 10 }}>
+          <LineChart points={history.map((h) => ({ label: h.date.slice(8) + '/' + h.date.slice(5, 7), value: h.value }))} color="var(--accent)" unit="kg" height={90} />
+          <p className="tiny muted">Força estimada (1RM) da melhor série de cada treino.</p>
+        </div>
       )}
       {sets.map((s, i) => (
         <div key={s.id} className="set-row small num">

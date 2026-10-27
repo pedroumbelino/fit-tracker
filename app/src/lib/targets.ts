@@ -2,11 +2,14 @@ import {
   RECIPES, SESSIONS, TARGETS, WEEK_MEALS, WEEK_TRAINING, isTrainingDay, recipeMacros, type Macros, type Slot,
 } from '../data/plan'
 import { dow, lastDays } from './date'
-import type { Checkin, DayLog, HealthDay, State } from './store'
+import { store, type Checkin, type DayLog, type HealthDay, type State } from './store'
 
 export function dayTargets(date: string) {
   const training = isTrainingDay(dow(date))
-  const m = training ? TARGETS.training : TARGETS.rest
+  const base = training ? TARGETS.training : TARGETS.rest
+  // O ajuste das revisões semanais mexe só nos hidratos: proteína e gordura ficam fixas.
+  const adjust = store.get().settings.kcalAdjust ?? 0
+  const m = { ...base, kcal: base.kcal + adjust, c: Math.max(100, base.c + Math.round(adjust / 4)) }
   const sessionId = WEEK_TRAINING[dow(date)]
   const water = TARGETS.waterMl + (SESSIONS[sessionId].kind !== 'rest' ? TARGETS.waterTrainingExtraMl : 0)
   return { ...m, water, training, sessionId }

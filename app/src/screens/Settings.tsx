@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { toast } from '../components/ui'
-import { store, useStore, actions, type Theme } from '../lib/store'
+import { useEffect, useState } from 'react'
+import { Check, toast } from '../components/ui'
+import { disablePush, enablePush, pushState, testPush, type PushState } from '../lib/push'
+import { DEFAULT_NOTIFY, store, useStore, actions, type NotifyKind, type Theme } from '../lib/store'
 import { SUPABASE_URL, supabase } from '../lib/supabase'
 import { syncNow, useSyncStatus } from '../lib/sync'
 
@@ -21,7 +22,9 @@ export default function Settings() {
       </div>
 
       <Account />
+      <Notifications />
       <HealthImport />
+      <SiriShortcuts />
       <Backup />
 
       <p className="tiny muted" style={{ textAlign: 'center', marginTop: 24 }}>
@@ -165,6 +168,107 @@ function Backup() {
             }
           }} />
         </label>
+      </div>
+    </>
+  )
+}
+
+const NOTIFY_LABELS: { kind: NotifyKind; label: string; when: string }[] = [
+  { kind: 'briefing', label: 'Resumo da manhã', when: '08:30 · sono, treino e metas do dia' },
+  { kind: 'water', label: 'Água', when: '11h, 14h, 17h e 20h, só se estiveres atrasado' },
+  { kind: 'supps', label: 'Suplementos', when: '13:30, se ainda não marcaste a creatina' },
+  { kind: 'training', label: 'Treino', when: '17:00 nos dias de ginásio' },
+  { kind: 'phone', label: 'Hora de desligar', when: '22:45 · telemóvel fora do quarto' },
+  { kind: 'weekly', label: 'Revisão semanal', when: 'Domingo às 19:00' },
+]
+
+function Notifications() {
+  const sync = useSyncStatus()
+  const notify = { ...DEFAULT_NOTIFY, ...useStore((s) => s.settings.notify) }
+  const [state, setState] = useState<PushState | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { pushState().then(setState) }, [])
+
+  async function run(fn: () => Promise<void>, ok: string) {
+    setBusy(true)
+    try {
+      await fn()
+      toast(ok)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Erro')
+    } finally {
+      setBusy(false)
+      setState(await pushState())
+    }
+  }
+
+  if (!supabase) return null
+  return (
+    <>
+      <h2>Notificações</h2>
+      <div className="card">
+        {state === 'install' && <p className="small">Para receberes lembretes, abre a Forma a partir do ícone no ecrã principal (Safari → Partilhar → Adicionar ao ecrã principal).</p>}
+        {state === 'unsupported' && <p className="small">Este dispositivo não suporta notificações web. No iPhone é preciso iOS 16.4 ou mais recente.</p>}
+        {state === 'denied' && <p className="small">As notificações estão bloqueadas. Ativa em Definições do iPhone → Notificações → Forma.</p>}
+        {!sync.email && (state === 'off' || state === 'on') && <p className="small">Inicia sessão para ativares os lembretes.</p>}
+        {sync.email && state === 'off' && (
+          <>
+            <p className="small" style={{ marginBottom: 10 }}>Poucos lembretes, só os que ajudam: água quando estás atrasado, creatina, treino e a hora de largar o telemóvel.</p>
+            <button className="btn block" disabled={busy} onClick={() => run(enablePush, 'Notificações ativadas')}>Ativar notificações</button>
+          </>
+        )}
+        {sync.email && state === 'on' && (
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn small secondary" disabled={busy} onClick={() => run(testPush, 'Enviada. Deve chegar em segundos.')}>Enviar teste</button>
+            <button className="btn small danger" disabled={busy} onClick={() => run(disablePush, 'Notificações desligadas')}>Desligar</button>
+          </div>
+        )}
+      </div>
+      {state === 'on' && (
+        <div className="card flush">
+          {NOTIFY_LABELS.map((n) => (
+            <button key={n.kind} className="list-item" onClick={() => actions.setNotify(n.kind, !notify[n.kind])}>
+              <div className="grow">
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{n.label}</div>
+                <div className="small muted">{n.when}</div>
+              </div>
+              <Check on={notify[n.kind]} />
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+function SiriShortcuts() {
+  const endpoint = `${SUPABASE_URL}/functions/v1/health-ingest`
+  if (!supabase) return null
+  return (
+    <>
+      <h2>Siri</h2>
+      <div className="card">
+        <p className="small">Dois atalhos curtos para registares sem abrir a app. Usam o mesmo URL e token do atalho da Saúde.</p>
+        <details style={{ marginTop: 10 }}>
+          <summary className="small" style={{ fontWeight: 600, color: 'var(--accent)' }}>"Bebi água" (+500 ml)</summary>
+          <ol className="small" style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <li>Novo atalho com o nome <b>Bebi água</b> (é o que dizes à Siri).</li>
+            <li><b>Obter conteúdo do URL</b>: <code style={{ wordBreak: 'break-all' }}>{endpoint}</code>, Método POST, cabeçalho <code>Authorization</code> = <code>Bearer O_TEU_TOKEN</code>, Corpo JSON com o campo Número <code>add_water_ml</code> = <code>500</code>.</li>
+            <li><b>Obter valor do dicionário</b>: chave <code>message</code>.</li>
+            <li><b>Mostrar resultado</b> com o Valor do dicionário. A Siri lê-o em voz alta.</li>
+          </ol>
+          <p className="tiny muted">Para um copo pequeno, duplica o atalho com 250 e chama-lhe "Bebi um copo".</p>
+        </details>
+        <details style={{ marginTop: 10 }}>
+          <summary className="small" style={{ fontWeight: 600, color: 'var(--accent)' }}>"Peso" (pergunta o peso e regista)</summary>
+          <ol className="small" style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <li>Novo atalho com o nome <b>Registar peso</b>.</li>
+            <li><b>Pedir entrada</b>: tipo Número, pergunta "Quanto pesas hoje?".</li>
+            <li><b>Obter conteúdo do URL</b>: mesmo URL, POST, mesmo cabeçalho, Corpo JSON com o campo Texto <code>weight</code> = variável <b>Entrada fornecida</b>.</li>
+            <li><b>Obter valor do dicionário</b> <code>message</code> → <b>Mostrar resultado</b>.</li>
+          </ol>
+        </details>
       </div>
     </>
   )

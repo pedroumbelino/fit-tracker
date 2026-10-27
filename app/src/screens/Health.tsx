@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Tab } from '../App'
 import { LineChart, toast } from '../components/ui'
+import WeeklyReview from '../components/WeeklyReview'
 import { PROFILE, SLEEP_TIPS, TARGETS } from '../data/plan'
 import { addDays, lastDays, todayKey } from '../lib/date'
 import { actions, useStore, type HealthDay } from '../lib/store'
@@ -37,6 +38,8 @@ export default function Health({ go }: { go: (t: Tab) => void }) {
           <button className="btn small" onClick={() => go('settings')}>Configurar</button>
         </div>
       )}
+
+      <WeeklyReview />
 
       <div className="grid2">
         <Tile label="Peso (média 7 d)" value={fmt(lastAvg ?? latest(health, 'weight'), 1)} unit="kg"

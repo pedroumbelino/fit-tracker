@@ -207,6 +207,36 @@ async function readiness(context: unknown) {
   }
 }
 
+async function weekly(week: unknown, recommendation: unknown, context: unknown) {
+  // O Jev dá uma segunda opinião independente das regras da app, com probabilidade.
+  const jevCall = jev
+    ? jev.systemOne({
+        state: { week_stats: week as never, plan: 'Fat loss target 0.3 to 0.7 kg per week, protein 170 g/day, 6 sessions per week.' },
+        questions: {
+          decision: choice('Based on this week compared with the previous one, what should happen to his daily calorie target?', {
+            keep: 'Keep calories: the rate of loss is fine, or the data or adherence is not good enough to judge',
+            cut: 'Reduce by 150 kcal: weight is stalling despite good adherence',
+            add: 'Increase by 150 kcal: weight is dropping faster than 1 kg per week or recovery is suffering',
+          }),
+        },
+      }).then(({ answers }) => ({ decision: answers.decision.choice, confidence: answers.decision.confidence }))
+        .catch((e) => { console.error('jev weekly', e); return null })
+    : Promise.resolve(null)
+
+  const textCall = claude({
+    max_tokens: 2000,
+    system: COACH_SYSTEM,
+    output_config: { effort: 'low' },
+    messages: [{
+      role: 'user',
+      content: `Faz a revisão da minha semana em 3 a 5 frases: o que correu bem, o que melhorar e uma prioridade concreta para a próxima semana. A app recomendou isto: ${JSON.stringify(recommendation)}. Se discordares, diz porquê.\n\nEstatísticas da semana (JSON): ${JSON.stringify(week)}\n\nContexto (JSON): ${JSON.stringify(context)}`,
+    }],
+  })
+
+  const [jevResult, text] = await Promise.all([jevCall, textCall])
+  return { text, jev: jevResult }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   try {
@@ -228,6 +258,8 @@ Deno.serve(async (req) => {
         return json(await chat(body.messages ?? [], body.context))
       case 'readiness':
         return json(await readiness(body.context))
+      case 'weekly':
+        return json(await weekly(body.week, body.recommendation, body.context))
       default:
         return json({ error: 'mode inválido' }, 400)
     }
