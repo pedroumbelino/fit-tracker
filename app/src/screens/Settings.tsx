@@ -105,7 +105,8 @@ function HealthImport() {
     <>
       <h2>Apple Saúde</h2>
       <div className="card">
-        <p className="small">O iOS não deixa web apps lerem a app Saúde. A solução é um Atalho que, todas as manhãs, lê os dados do Apple Watch e envia-os para a tua base de dados.</p>
+        <p className="small">O iOS não deixa web apps lerem a app Saúde. A solução é um Atalho que, todos os dias às 22:30, lê os dados do Apple Watch e envia-os para a app.</p>
+        {supabase && !sync.email && <p className="small" style={{ marginTop: 8, color: 'var(--warn)' }}>Inicia sessão acima para gerares o token do Atalho.</p>}
         {supabase && sync.email && (
           <div className="stack" style={{ marginTop: 12 }}>
             <label className="lbl">URL do Atalho</label>
@@ -124,13 +125,13 @@ function HealthImport() {
           <summary className="small" style={{ fontWeight: 600, color: 'var(--accent)' }}>Como criar o Atalho (5 min)</summary>
           <ol className="small" style={{ paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <li>Atalhos → <b>+</b> → nome "Enviar Saúde".</li>
-            <li>Para cada métrica, adiciona <b>Encontrar amostras de Saúde</b>: Tipo = Passos, Data de início "está nos últimos 1 dias", Agrupar por Dia. Depois <b>Calcular estatísticas</b> → Soma. Repete para Energia ativa (Soma), Minutos de exercício (Soma), Frequência cardíaca em repouso (Média), Variabilidade da FC (Média), Peso (Mais recente), Gordura corporal (Mais recente), VO₂ máx (Mais recente).</li>
-            <li>Sono: <b>Encontrar amostras de Saúde</b> → Análise do sono, últimas 18 horas, Valor é "A dormir". <b>Calcular estatísticas</b> → Soma da Duração, em horas.</li>
-            <li><b>Dicionário</b> com as chaves: <code>steps</code>, <code>active_kcal</code>, <code>exercise_min</code>, <code>resting_hr</code>, <code>hrv</code>, <code>weight</code>, <code>body_fat</code>, <code>vo2max</code>, <code>sleep_h</code> (números) e <code>date</code> (Data atual, formato aaaa-MM-dd).</li>
-            <li><b>Obter conteúdo do URL</b>: URL acima, Método POST, Cabeçalho <code>Authorization</code> = <code>Bearer O_TEU_TOKEN</code>, Corpo do pedido JSON = o Dicionário.</li>
-            <li>Automação → Pessoal → <b>Hora do dia</b> 09:00, Diariamente, <b>Executar imediatamente</b> → Executar atalho "Enviar Saúde". Cria outra às 22:00 para os passos do dia.</li>
+            <li>Para cada métrica: <b>Encontrar amostras de Saúde</b> → <b>Calcular estatísticas</b> → <b>Definir variável</b>. Passos e Energia ativa: data de início é hoje, Soma. FC em repouso e Variabilidade da FC: últimos 1 dias, Média.</li>
+            <li>Peso: <b>Encontrar amostras de Saúde</b>, mais recente primeiro, limite 1 → <b>Definir variável</b>.</li>
+            <li>Sono: Análise do sono, últimos 1 dias, Valor não é "Na cama" nem "Acordado" → <b>Obter detalhes</b> Duração → <b>Calcular estatísticas</b> Soma → <b>Definir variável</b>.</li>
+            <li><b>Obter conteúdo do URL</b>: URL acima, Método POST, Cabeçalho <code>Authorization</code> = <code>Bearer O_TEU_TOKEN</code>, Corpo JSON com <code>steps</code>, <code>active_kcal</code>, <code>resting_hr</code>, <code>hrv</code>, <code>weight</code>, <code>sleep_h</code>.</li>
+            <li>Automação → <b>Hora do dia</b> 22:30, Diariamente, <b>Executar imediatamente</b> → "Enviar Saúde".</li>
           </ol>
-          <p className="tiny muted">O sono da noite é atribuído ao dia em que acordas. O guia completo, com o JSON de exemplo, está no README do projeto.</p>
+          <p className="tiny muted">Podes mandar os valores com unidades ("83,6 kg"): a app trata da conversão.</p>
         </details>
       </div>
     </>
