@@ -3,6 +3,7 @@ import { Check, Icon, MacroBar, Sheet, toast } from '../components/ui'
 import {
   BATCH_COOKING, DAY_SHORT, FOODS, NUTRIENTS, PANTRY, SHOPPING, SLOTS, SUPPLEMENTS, WATER_SCHEDULE, type Slot,
 } from '../data/plan'
+import { searchDishes, type Dish } from '../data/dishes'
 import { ai, aiAvailable, fileToJpegBase64, type MealAnalysis } from '../lib/ai'
 import { addDays, dow, todayKey } from '../lib/date'
 import { actions, getDay, store, useStore } from '../lib/store'
@@ -248,15 +249,98 @@ function PhotoMeal({ onDone }: { onDone: () => void }) {
   )
 }
 
+const PORTIONS = [0.5, 1, 1.5, 2]
+
 function ManualMeal({ onDone }: { onDone: () => void }) {
   const [slot, setSlot] = useState<Slot>(currentSlot())
-  const [f, setF] = useState({ name: '', kcal: '', p: '', c: '', g: '' })
+  const [name, setName] = useState('')
+  // Valores de 1 dose; os campos mostram dose × porção e podem ser corrigidos à mão.
+  const [base, setBase] = useState<{ kcal: number; p: number; c: number; g: number } | null>(null)
+  const [portion, setPortion] = useState(1)
+  const [f, setF] = useState({ kcal: '', p: '', c: '', g: '' })
+  const [source, setSource] = useState<{ label: string; lactose?: boolean } | null>(null)
+  const [loading, setLoading] = useState(false)
   const num = (v: string) => Number(v.replace(',', '.')) || 0
+  const suggestions = base ? [] : searchDishes(name)
+
+  function fill(b: { kcal: number; p: number; c: number; g: number }, k: number) {
+    const r = (v: number) => String(Math.round(v * k))
+    setF({ kcal: r(b.kcal), p: r(b.p), c: r(b.c), g: r(b.g) })
+  }
+
+  function pick(d: Dish) {
+    setName(d.name)
+    setBase(d)
+    setPortion(1)
+    fill(d, 1)
+    setSource({ label: d.plan ? 'Receita do teu plano' : `Valores típicos para ${d.portion}`, lactose: d.lactose })
+  }
+
+  async function estimate() {
+    setLoading(true)
+    try {
+      const res = await ai.meal(null, name, buildContext(store.get(), todayKey()))
+      const b = { kcal: res.total.kcal, p: res.total.protein_g, c: res.total.carbs_g, g: res.total.fat_g }
+      setBase(b)
+      setPortion(1)
+      fill(b, 1)
+      setSource({ label: `Estimativa da AI (confiança ${res.confidence}). ${res.tip}`, lactose: (res.jev?.lactose ?? 0) > 0.5 })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Erro na AI')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="stack" style={{ gap: 12 }}>
       <h2 style={{ margin: 0 }}>Adicionar refeição</h2>
       <SlotPicker value={slot} onChange={setSlot} />
-      <input className="field" placeholder="Nome" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+      <div>
+        <input
+          className="field" placeholder="O que comeste? Ex.: bitoque, tosta mista" value={name} autoFocus
+          onChange={(e) => { setName(e.target.value); setBase(null); setSource(null) }}
+        />
+        {suggestions.length > 0 && (
+          <div className="card flush" style={{ marginTop: 6, marginBottom: 0 }}>
+            {suggestions.map((d) => (
+              <button key={d.id} className="list-item" style={{ minHeight: 44, padding: '8px 14px' }} onClick={() => pick(d)}>
+                <div className="grow">
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{d.name}</div>
+                  <div className="tiny muted num">{d.portion} · {Math.round(d.kcal)} kcal · P {Math.round(d.p)} g</div>
+                </div>
+                {d.plan && <span className="chip accent">plano</span>}
+                {d.lactose && <span className="chip warn">lactose</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {!base && name.trim().length >= 3 && aiAvailable() && (
+        <button className="btn secondary block" onClick={estimate} disabled={loading}>
+          {loading ? <><span className="spinner" /> A estimar…</> : suggestions.length ? 'Não é nenhum destes: estimar com AI' : 'Estimar calorias com AI'}
+        </button>
+      )}
+      {!base && name.trim().length >= 3 && !aiAvailable() && suggestions.length === 0 && (
+        <p className="small muted">Não encontrei este prato. Preenche os valores à mão, ou liga a AI para estimativas automáticas.</p>
+      )}
+      {source && (
+        <p className="small" style={{ color: 'var(--muted)' }}>
+          {source.label}{source.lactose && <span className="chip warn" style={{ marginLeft: 6 }}>pode ter lactose</span>}
+        </p>
+      )}
+      {base && (
+        <div>
+          <label className="lbl">Porção</label>
+          <div className="segmented" style={{ marginBottom: 0 }}>
+            {PORTIONS.map((k) => (
+              <button key={k} className={portion === k ? 'on' : ''} onClick={() => { setPortion(k); fill(base, k) }}>
+                {k === 0.5 ? '½' : k === 1.5 ? '1½' : k}×
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="grid2">
         {(['kcal', 'p', 'c', 'g'] as const).map((k) => (
           <div key={k}>
@@ -265,8 +349,9 @@ function ManualMeal({ onDone }: { onDone: () => void }) {
           </div>
         ))}
       </div>
-      <button className="btn block" disabled={!f.name || !f.kcal} onClick={() => {
-        actions.addMeal({ slot, name: f.name, source: 'manual', kcal: num(f.kcal), p: num(f.p), c: num(f.c), g: num(f.g) })
+      <button className="btn block" disabled={!name.trim() || !f.kcal} onClick={() => {
+        const label = portion === 1 ? name.trim() : `${name.trim()} (${portion === 0.5 ? '½' : portion === 1.5 ? '1½' : portion}×)`
+        actions.addMeal({ slot, name: label, source: 'manual', kcal: num(f.kcal), p: num(f.p), c: num(f.c), g: num(f.g), notes: source?.label })
         toast('Refeição registada')
         onDone()
       }}>Guardar</button>
