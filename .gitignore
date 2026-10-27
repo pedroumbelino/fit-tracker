@@ -1,2 +1,3 @@
 .supabase/
 .env
+.netlify
